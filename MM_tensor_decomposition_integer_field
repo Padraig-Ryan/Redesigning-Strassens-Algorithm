@@ -1,0 +1,171 @@
+//defining the  vector space to work over F_q^n
+n := 2;
+Q :=Rationals();
+
+F :=Rationals(); // if we want to work over Q or Z
+
+//setting up vector spaces and matrix spaces
+V := KMatrixSpace(F,n,1);
+Vec :=VectorSpace(F,n);
+M := KMatrixSpace(F,n,n);
+
+//define general linear group
+G := GL(n,F);
+
+//S_3 for when n=2
+if n eq 2 then;
+    gen1 := G![0,1,-1,-1];
+    gen2 := G![1,1,0,-1];
+    Gtest := sub<G|gen1,gen2>;
+end if;
+
+// S_4 for when n=3
+if n eq 3 then;
+    gen1 := G![1,0,0,0,1,0,0,1,-1];
+    gen2 := G![1,0,0,1,-1,1,0,0,1];
+    gen3 := G![-1,1,0,0,1,0,0,0,1];
+    gen4 := G![0,0,-1,-1,1,-1,-1,0,0];
+    Gtest := sub<G|gen1,gen2,gen3,gen4>;
+end if;
+
+//SG allows us to test multiple group actions subsequently
+SG:=[Gtest];
+
+//----------- vectors to search when working over Z -----------
+//this has similar end results to above, but we have to do it manually,
+//because we only want vectors in {-1,0,1}^n
+VR1 := [[-1],[0],[1]];	
+for i in [1..n-1] do;
+	VR2 := [];
+	for j in [1..#VR1] do;
+		for k in [-1..1] do;
+			VR2 := Append(VR2,Append(VR1[j],k));
+		end for;
+	end for;
+	VR1 := VR2;
+end for;
+VR3 := [];
+//Convert sequences of sequences into sequences of vectors
+for i in VR1 do;
+	VR3 := Append(VR3,V!i);
+end for;
+VR1 := VR3;
+VR1 := {v: v in VR1 | v ne V!0};
+//select a set of vectors that generate unique subspaces 
+VR1 := [v:v in VR1 | v[i][1] eq 1 where i is Min({j:j in [1..n] | v[j][1] ne 0}) ];
+
+//Matrix Multiplication Tensor
+MM := function()
+	E := Basis(V);	
+	temp1 := TensorProduct(V!0,V!0);
+	MM :=  TensorProduct(TensorProduct(temp1,temp1),temp1);
+	i :=1;
+	j :=1;
+	k :=1;
+	l :=1;
+	s :=1;
+	t :=1;
+
+	while i le n do;
+		while j le n do;
+			while k le n do;
+				temp2 :=TensorProduct(E[k],E[i]);
+				temp3 :=TensorProduct(E[i],E[j]);
+				temp4 :=TensorProduct(E[j],E[k]);
+				MM := MM + TensorProduct(TensorProduct(temp2,temp3),temp4);
+				k := k+1;
+				
+			end while;
+			j := j+1;
+			k := 1;
+		end while;
+		i := i+1;
+		j:=1;
+	end while;
+	return MM;
+end function;
+
+
+//id ^{tensor product 3)
+calcId := function()
+	E := Basis(V);
+	i :=1;
+	IdIter := [[1,1,1],[1,1,2],[1,2,1],[1,2,2],[2,1,1],[2,1,2],[2,2,1],[2,2,2]];
+	list1 := {};
+        i:=1;
+        while i le n do;
+            j:=1;
+	    while j le n do;
+                k:=1;
+            	while k le n do;
+	            A:=TensorProduct(E[i], E[i]);
+	            B:=TensorProduct(E[j], E[j]);
+	            C:=TensorProduct(E[k], E[k]);
+	            AB:=TensorProduct(A,B);
+	            list1 := list1 join {TensorProduct(AB,C)};
+	            k := k +1;
+                end while;
+                j:=j+1;
+            end while;
+            i:= i+1;
+	end while;
+	return &+[a: a in list1];
+end function;
+
+//Function to calculate the tensor product of 6 vectors
+SixTensor := function(a,b,c,d,e,f)
+	s1:=TensorProduct(a,b);
+	s2:=TensorProduct(c,d);
+	s3:=TensorProduct(e,f);
+	return TensorProduct(TensorProduct(s1,s2),s3);	
+
+end function;
+
+//applies GL^6 before tensor product
+funct0 := function(v1,v2,v3,v4,v5,v6,g1,g2,g3,g4,g5,g6)
+	return SixTensor(g1*v1,g2*v2,g3*v3,g4*v4,g5*v5,g6*v6);
+end function;
+
+//applies (g_1,g_1^-t,... in GL^6 to vectors then takes the 6 tensor product
+funct3 := function(v1,v2,v3,v4,v5,v6,A)
+	B := Transpose(A^-1);
+	return funct0(v1,v2,v3,v4,v5,v6,A,B,A,B,A,B);
+end function;
+
+Id := calcId();
+MMa := MM();
+T := Parent(MMa);
+
+//check if we got a set of tensors that match MMa-id
+CheckVectorsGrow :=function(v1,v2,v3,v4,v5,v6,H)
+	Sum := &+[funct3(v1,v2,v3,v4,v5,v6,A): A in H];
+	return Sum in sub<T|MMa-Id> and Sum ne T!0; 
+        //we check the subspace above because of the lambda multiple term in the equation
+end function;
+
+
+//The main code that iterates through 
+//the representatives of the subspaces of vectors
+GeneralTest := function(SG);
+	for H in SG do;
+		print "this group:";
+		H; //print the group
+		count :=0;
+		for v in CartesianPower(VR1, 6) do;
+			if (CheckVectorsGrow(v[1],v[2],v[3],v[4],v[5],v[6],H)) then;
+				print "answer";
+				v; //print the solution vectors
+				count := count +1; //number of solutions
+				print "end answer";
+				print "";
+			end if;
+		end for;
+		print "count: " , count;
+	end for;
+	return 1;
+end function;
+
+// start the search
+GeneralTest(SG);
+
+print "eof";
